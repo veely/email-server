@@ -4,9 +4,12 @@ const express = require('express');
 const app = express();
 const PORT = 3001;
 const bodyParser = require('body-parser');
-const nodemailer = require('nodemailer');
-const ses = require('node-ses');
-const sesClient = ses.createClient({ key: process.env.SES_KEY, secret: process.env.SES_SECRET });
+
+const aws = require('aws-sdk');
+aws.config.loadFromPath('config.json');
+aws.config.update({region: 'us-east-1'});
+const sesClient = new aws.SES();
+
 const Email = require('./class/Email');
 const MongoClient = require("mongodb").MongoClient;
 const mongodb_uri = "mongodb://localhost:27017";
@@ -42,7 +45,35 @@ app.post('/send-email', (req, res) => {
                 subject: subject,
                 message: message
               }
-              let email = new Email(content);
+              // let email = new Email(content);
+              let email = {
+                Destination: {
+                 BccAddresses: [
+                 ], 
+                 CcAddresses: [
+                 ], 
+                 ToAddresses: [
+                   to
+                 ]
+                }, 
+                Message: {
+                 Body: {
+                  Html: {
+                   Charset: "UTF-8", 
+                   Data: "This message body contains HTML formatting. It can, for example, contain links like this one: <a class=\"ulink\" href=\"http://docs.aws.amazon.com/ses/latest/DeveloperGuide\" target=\"_blank\">Amazon SES Developer Guide</a>."
+                  }, 
+                  Text: {
+                   Charset: "UTF-8", 
+                   Data: "This is the message body in text format."
+                  }
+                 }, 
+                 Subject: {
+                  Charset: "UTF-8", 
+                  Data: "Test email"
+                 }
+                },
+                Source: from
+               };
               sesClient.sendEmail(email, (err, data, res) => {
                 if (err) {
                   reject(err);
