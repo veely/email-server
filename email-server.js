@@ -21,40 +21,50 @@ app.post('/send-email', (req, res) => {
   subject = req.body.subject,
   message = req.body.body;
 
-  MongoClient.connect(mongodb_uri, (err, client) => {
-    if (err) {
-      console.error(`Failed to connect: ${mongodb_uri}`);
-      throw err;
-    }
-    console.log(`Successfully connected: ${mongodb_uri}`);
-    let db = client.db('email');
-    db.collection("blacklist").find({ email_address: from }, (err, results) => {
-      if (err) throw err;
-      results.count().then( result => {
-        if (result) {
-          console.log("Error: Sender email address is blacklisted. The email has been bounced.");
-        } else {
-          let content = {
-            from: from,
-            to: to,
-            subject: subject,
-            message: message
-          }
-        
-          let email = new Email(content);
-        
-          sesClient.sendEmail(email, (err, data, res) => {
-            if (err) {
-              console.log(err);
+  function checkBlacklist() {
+    return new Promise ((resolve, reject) => {
+      MongoClient.connect(mongodb_uri, (err, client) => {
+        if (err) {
+          console.error(`Failed to connect: ${mongodb_uri}`);
+          throw err;
+        }
+        console.log(`Successfully connected: ${mongodb_uri}`);
+        let db = client.db('email');
+        db.collection("blacklist").find({ email_address: from }, (err, results) => {
+          if (err) throw err;
+          results.count().then( result => {
+            if (result) {
+              reject("Error: Sender email address is blacklisted. The email has been bounced.");
             } else {
-              console.log("Successfully sent email.");
+              let content = {
+                from: from,
+                to: to,
+                subject: subject,
+                message: message
+              }
+            
+              let email = new Email(content);
+            
+              sesClient.sendEmail(email, (err, data, res) => {
+                if (err) {
+                  reject(err);
+                } else {
+                  resolve("Successfully sent email.");
+                }
+              });
             }
           });
-        }
+        });
+        client.close();
       });
     });
+  }
+
+  checkBlacklist().then( result => {
+    res.send(result);
+  }).catch( err => {
+    res.send(err);
   });
-  res.end();
 });
 
 app.post('/bounced-email', (req, res) => {
