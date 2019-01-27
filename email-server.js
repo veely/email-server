@@ -21,9 +21,9 @@ app.post('/send-email', (req, res) => {
   subject = req.body.subject,
   message = req.body.body;
 
-  function checkBlacklist() {
-    return new Promise ((resolve, reject) => {
-      MongoClient.connect(mongodb_uri, (err, client) => {
+  MongoClient.connect(mongodb_uri, (err, client) => {
+    function checkBlacklist() {
+      return new Promise ( (resolve, reject) => {
         if (err) {
           console.error(`Failed to connect: ${mongodb_uri}`);
           throw err;
@@ -42,9 +42,7 @@ app.post('/send-email', (req, res) => {
                 subject: subject,
                 message: message
               }
-            
               let email = new Email(content);
-            
               sesClient.sendEmail(email, (err, data, res) => {
                 if (err) {
                   reject(err);
@@ -55,20 +53,48 @@ app.post('/send-email', (req, res) => {
             }
           });
         });
-        client.close();
       });
-    });
-  }
+    }
 
-  checkBlacklist().then( result => {
-    res.send(result);
-  }).catch( err => {
-    res.send(err);
+    checkBlacklist().then( result => {
+      let response = JSON.stringify({ status: "OK", message: result });
+      client.close();
+      res.send(response);
+    }).catch( err => {
+      let response = JSON.stringify({ status: "Failed", message: err });
+      client.close();
+      res.send(response);
+    });
   });
 });
 
 app.post('/bounced-email', (req, res) => {
-  
+  let email_address = req.body.email_address;
+  MongoClient.connect(mongodb_uri, (err, client) => {
+    function blacklistEmail() {
+      return new Promise( (resolve, reject) => {
+        if (err) {
+          console.error(`Failed to connect: ${mongodb_uri}`);
+          throw err;
+        }
+        console.log(`Successfully connected: ${mongodb_uri}`);
+        let db = client.db('email');
+        db.collection("blacklist").insert({ email_address: email_address }).then( result => {
+          resolve("Added the email address to the blacklist. Future emails being sent from this address will be bounced.");
+        });
+      });
+    }
+
+    blacklistEmail().then( result => {
+      let response = JSON.stringify({ status: "OK", message: result });
+      client.close();
+      res.send(response);
+    }).catch( err => {
+      let response = JSON.stringify({ status: "Failed", message: err });
+      client.close();
+      res.send(response);
+    });
+  });
 });
 
 app.listen(PORT, () => {
