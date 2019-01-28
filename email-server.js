@@ -20,9 +20,14 @@ app.use(express.static(path.join(__dirname, 'public')))
 
 app.post('/send-email', (req, res) => {
   const from = req.body.fromEmail,
-  to = req.body.toEmail,
+  to = req.body.toEmail.split(','),
   subject = req.body.subject,
-  message = req.body.body;
+  body_html = req.body.body_html,
+  body_text = "N/A";
+
+  if (req.body.body_text) {
+    body_text = req.body.body_text;
+  }
 
   MongoClient.connect(mongodb_uri, (err, client) => {
     function checkBlacklist() {
@@ -40,41 +45,29 @@ app.post('/send-email', (req, res) => {
               reject("Error: Sender email address is blacklisted. The email has been bounced.");
             } else {
               let content = {
-                from: from,
-                to: to,
-                subject: subject,
-                message: message
-              }
-              // let email = new Email(content);
-              let email = {
                 Destination: {
-                 BccAddresses: [
-                 ], 
-                 CcAddresses: [
-                 ], 
-                 ToAddresses: [
-                   to
-                 ]
+                  ToAddresses: to
                 }, 
                 Message: {
-                 Body: {
-                  Html: {
-                   Charset: "UTF-8", 
-                   Data: "This message body contains HTML formatting. It can, for example, contain links like this one: <a class=\"ulink\" href=\"http://docs.aws.amazon.com/ses/latest/DeveloperGuide\" target=\"_blank\">Amazon SES Developer Guide</a>."
+                  Body: {
+                    Html: {
+                    Charset: "UTF-8", 
+                    Data: body_html
+                    }, 
+                    Text: {
+                    Charset: "UTF-8", 
+                    Data: body_text
+                    }
                   }, 
-                  Text: {
-                   Charset: "UTF-8", 
-                   Data: "This is the message body in text format."
+                  Subject: {
+                    Charset: "UTF-8", 
+                    Data: subject
                   }
-                 }, 
-                 Subject: {
-                  Charset: "UTF-8", 
-                  Data: "Test email"
-                 }
                 },
                 Source: from
-               };
-              sesClient.sendEmail(email, (err, data, res) => {
+              };
+              let email = new Email(content);
+              sesClient.sendEmail(email, (err, data) => {
                 if (err) {
                   reject(err);
                 } else {
