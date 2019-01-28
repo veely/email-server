@@ -8,15 +8,18 @@ async function send(email, client, ses) {
       }
       results.count().then( result => {
         if (result) {
-          resolve(false);
-        } else {
           resolve(true);
+        } else {
+          resolve(false);
         }
       });
     });
   });
-  let goodEmailAddress = await promise;
-  if (goodEmailAddress) {
+  let isBlacklisted = await promise;
+  if (isBlacklisted) {
+    console.log("Failed to send email.")
+    result = JSON.stringify({ status: "Failed", message: "The sender's email address is blacklisted. Email has been bounced." });
+  } else {
     let promise = new Promise( resolve => {
       ses.sendEmail(email, (err, data) => {
         if (err) {
@@ -29,9 +32,6 @@ async function send(email, client, ses) {
       });
     });
     result = await promise;
-  } else {
-    console.log("Failed to send email.")
-    result = JSON.stringify({ status: "Failed", message: "The sender's email address is blacklisted. Email has been bounced." });
   }
   return Promise.resolve(result);
 }
