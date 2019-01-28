@@ -44,36 +44,7 @@ app.post('/send-email', (req, res) => {
             if (result) {
               reject("Error: Sender email address is blacklisted. The email has been bounced.");
             } else {
-              let content = {
-                Destination: {
-                  ToAddresses: to
-                }, 
-                Message: {
-                  Body: {
-                    Html: {
-                    Charset: "UTF-8", 
-                    Data: body_html
-                    }, 
-                    Text: {
-                    Charset: "UTF-8", 
-                    Data: body_text
-                    }
-                  }, 
-                  Subject: {
-                    Charset: "UTF-8", 
-                    Data: subject
-                  }
-                },
-                Source: from
-              };
-              let email = new Email(content);
-              sesClient.sendEmail(email, (err, data) => {
-                if (err) {
-                  reject(err);
-                } else {
-                  resolve("Successfully sent email.");
-                }
-              });
+              resolve("Sending email...");
             }
           });
         });
@@ -81,9 +52,44 @@ app.post('/send-email', (req, res) => {
     }
 
     checkBlacklist().then( result => {
-      let response = JSON.stringify({ status: "OK", message: result });
-      client.close();
-      res.send(response);
+      async function send() {
+        let content = {
+          Destination: {
+            ToAddresses: to
+          }, 
+          Message: {
+            Body: {
+              Html: {
+              Charset: "UTF-8", 
+              Data: body_html
+              }, 
+              Text: {
+              Charset: "UTF-8", 
+              Data: body_text
+              }
+            }, 
+            Subject: {
+              Charset: "UTF-8", 
+              Data: subject
+            }
+          },
+          Source: from
+        };
+        let email = new Email(content);
+        let promise = new Promise( (resolve, reject) => {
+          sesClient.sendEmail(email, (err, data) => {
+            if (err) {
+              resolve(JSON.stringify({ status: "Failed", message: err }));
+            } else {
+              resolve(JSON.stringify({ status: "OK", data: data }));
+            }
+          });
+        });
+        let response = await promise;
+        client.close();
+        res.send(response);
+      }
+      send();
     }).catch( err => {
       let response = JSON.stringify({ status: "Failed", message: err });
       client.close();
