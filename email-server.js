@@ -30,66 +30,36 @@ app.post('/send-email', (req, res) => {
   }
 
   MongoClient.connect(mongodb_uri, (err, client) => {
-    function checkBlacklist() {
-      return new Promise ( (resolve, reject) => {
-        if (err) {
-          console.error(`Failed to connect: ${mongodb_uri}`);
-          throw err;
-        }
-        console.log(`Successfully connected: ${mongodb_uri}`);
-        let db = client.db('email');
-        db.collection("blacklist").find({ email_address: from }, (err, results) => {
-          if (err) throw err;
-          results.count().then( result => {
-            if (result) {
-              reject("Error: Sender email address is blacklisted. The email has been bounced.");
-            } else {
-              resolve("Sending email...");
-            }
-          });
-        });
-      });
+    if (err) {
+      console.error(`Failed to connect: ${mongodb_uri}`);
+      throw err;
     }
-
-    checkBlacklist().then( result => {
-      async function send() {
-        let content = {
-          Destination: {
-            ToAddresses: to
-          }, 
-          Message: {
-            Body: {
-              Html: {
-              Charset: "UTF-8", 
-              Data: body_html
-              }, 
-              Text: {
-              Charset: "UTF-8", 
-              Data: body_text
-              }
+    console.log(`Successfully connected: ${mongodb_uri}`);
+    checkBlacklist(from, client).then( result => {
+      console.log(result);
+      let emailParams = {
+        Destination: {
+          ToAddresses: to
+        }, 
+        Message: {
+          Body: {
+            Html: {
+            Charset: "UTF-8", 
+            Data: body_html
             }, 
-            Subject: {
-              Charset: "UTF-8", 
-              Data: subject
+            Text: {
+            Charset: "UTF-8", 
+            Data: body_text
             }
-          },
-          Source: from
-        };
-        let email = new Email(content);
-        let promise = new Promise( (resolve, reject) => {
-          sesClient.sendEmail(email, (err, data) => {
-            if (err) {
-              resolve(JSON.stringify({ status: "Failed", message: err }));
-            } else {
-              resolve(JSON.stringify({ status: "OK", data: data }));
-            }
-          });
-        });
-        let response = await promise;
-        client.close();
-        res.send(response);
-      }
-      send();
+          }, 
+          Subject: {
+            Charset: "UTF-8", 
+            Data: subject
+          }
+        },
+        Source: from
+      };
+      send(emailParams, client, res);
     }).catch( err => {
       let response = JSON.stringify({ status: "Failed", message: err });
       client.close();
@@ -130,3 +100,39 @@ app.post('/bounced-email', (req, res) => {
 app.listen(PORT, () => {
   console.log(`email-server is listening on port ${PORT}.`);
 });
+
+function checkBlacklist(from, client) {
+  return new Promise ( (resolve, reject) => {
+    let db = client.db('email');
+    db.collection("blacklist").find({ email_address: from }, (err, results) => {
+      if (err) {
+        throw err;
+      }
+      results.count().then( result => {
+        if (result) {
+          reject("Error: Sender email address is blacklisted. The email has been bounced.");
+        } else {
+          resolve("Sending email...");
+        }
+      });
+    });
+  });
+}
+
+async function send(emailParams, client, res) {
+  let email = new Email(emailParams);
+  let promise = new Promise( (resolve, reject) => {
+    sesClient.sendEmail(email, (err, data) => {
+      if (err) {
+        console.log("Failed to sent email.")
+        resolve(JSON.stringify({ status: "Failed", message: err }));
+      } else {
+        console.log("Successfully sent email.");
+        resolve(JSON.stringify({ status: "OK", data: data }));
+      }
+    });
+  });
+  let response = await promise;
+  client.close();
+  res.send(response);
+}
