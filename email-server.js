@@ -59,7 +59,14 @@ app.post('/send-email', (req, res) => {
         },
         Source: from
       };
-      send(emailParams, client, res);
+      send(emailParams).then( result => {
+        console.log("DSADSADSADSADSA");
+        client.close();
+        res.send(result);
+      }).catch( err => {
+        client.close();
+        res.send(err);
+      });
     }).catch( err => {
       let response = JSON.stringify({ status: "Failed", message: err });
       client.close();
@@ -101,38 +108,42 @@ app.listen(PORT, () => {
   console.log(`email-server is listening on port ${PORT}.`);
 });
 
-function checkBlacklist(from, client) {
-  return new Promise ( (resolve, reject) => {
-    let db = client.db('email');
-    db.collection("blacklist").find({ email_address: from }, (err, results) => {
-      if (err) {
-        throw err;
-      }
+async function send() {
+  let db = client.db('email');
+  db.collection("blacklist").find({ email_address: from }, (err, results) => {
+    if (err) {
+      throw err;
+    }
+    let promise = new Promise( (resolve, reject) => {
       results.count().then( result => {
         if (result) {
           reject("Error: Sender email address is blacklisted. The email has been bounced.");
         } else {
-          resolve("Sending email...");
+          resolve(true);
         }
       });
     });
+    let goodEmailAddress = await promise;
+    if (goodEmailAddress) {
+      let email = new Email(emailParams);
+      let promise = new Promise( (resolve, reject) => {
+        sesClient.sendEmail(email, (err, data) => {
+          if (err) {
+            console.log("Failed to sent email.")
+            reject(JSON.stringify({ status: "Failed", message: err }));
+          } else {
+            console.log("Successfully sent email.");
+            resolve("asdf");
+          }
+        });
+      });
+    }
   });
-}
 
-async function send(emailParams, client, res) {
-  let email = new Email(emailParams);
-  let promise = new Promise( (resolve, reject) => {
-    sesClient.sendEmail(email, (err, data) => {
-      if (err) {
-        console.log("Failed to sent email.")
-        resolve(JSON.stringify({ status: "Failed", message: err }));
-      } else {
-        console.log("Successfully sent email.");
-        resolve(JSON.stringify({ status: "OK", data: data }));
-      }
+  function send(emailParams) {
+    return new Promise( (resolve, reject) => {
+      
     });
-  });
-  let response = await promise;
-  client.close();
-  res.send(response);
+  }
+
 }
